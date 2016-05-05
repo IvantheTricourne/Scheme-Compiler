@@ -1,0 +1,76 @@
+(library (Compiler specify-representation)
+  (export specify-representation)
+  (import (chezscheme) (Framework match) (Framework helpers) (Compiler helpers))
+  (define-who (specify-representation x)
+    (define (specify x)
+      (match x
+        ;; BNF wrappers
+        ((let ((,var ,[bind]) ...) ,[tail]) `(let ((,var ,bind) ...) ,tail))
+        ((begin ,[eff*] ... ,[tail]) (make-begin `(,eff* ... ,tail)))
+        ((if ,[p] ,[c] ,[a]) `(if ,p ,c ,a))
+        ((,rat ,[rand*] ...) (guard (call? rat)) `(,(specify rat) ,@rand*))
+        ;; Procedure handlers
+        ((make-procedure ,[lab] ,[val])
+         (let ([uv (unique-name 't)])
+           `(let ([,uv (+ (alloc ,(+ disp-procedure-data val)) ,tag-procedure)])
+              (begin (mset! ,uv ,(- disp-procedure-code tag-procedure) ,lab) ,uv))))
+        ((procedure-code ,[code])
+         `(mref ,code ,(- disp-procedure-code tag-procedure)))
+        ((procedure-ref ,[cp] ,[off])
+         `(mref ,cp ,(+ (- disp-procedure-data tag-procedure) off)))
+        ((procedure-set! ,[uv] ,[val] ,[uv^])
+         `(mset! ,uv ,(+ (- disp-procedure-data tag-procedure) val) ,uv^))
+        ;; List handlers
+        ((cons ,[a] ,[d])
+         (let* ([ca (unique-name 't)] [cd (unique-name 't)]
+                [al (unique-name 't)])
+           `(let ([,ca ,a] [,cd ,d])
+              (let ([,al (+ (alloc ,size-pair) ,tag-pair)])
+                ,(make-begin
+                  `((mset! ,al ,(sub1 disp-car) ,ca)
+                    (mset! ,al ,(sub1 disp-cdr) ,cd) ,al))))))
+        ((car ,[ls]) `(mref ,ls ,(sub1 disp-car)))
+        ((cdr ,[ls]) `(mref ,ls ,(sub1 disp-cdr)))
+        ((set-car! ,[ls] ,[val]) `(mset! ,ls ,(sub1 disp-car) ,val))
+        ((set-cdr! ,[ls] ,[val]) `(mset! ,ls ,(sub1 disp-cdr) ,val))
+        ;; Vector handling
+        ((make-vector ,[size])
+         (let* ([int? (integer? size)] [tmp1 (unique-name 't)] [tmp2 (unique-name 't)]
+                [val (if (integer? size) size tmp1)] [mem  `(+ ,disp-vector-data ,val)]
+                [exp `(let ([,tmp2 (+ (alloc ,(if int? (eval mem) mem)) ,tag-vector)])
+                        ,(make-begin `((mset! ,tmp2 ,vec-offset ,val) ,tmp2)))])
+           (if int? exp `(let ([,tmp1 ,size]) ,exp))))
+        ((vector-ref ,[vec] ,[i])
+         (let ([off `(+ (- ,disp-vector-data ,tag-vector) ,i)])
+           `(mref ,vec ,(if (integer? i) (eval off) off))))
+        ((vector-set! ,[vec] ,[i] ,[val])
+         (let ([off `(+ (- ,disp-vector-data ,tag-vector) ,i)])
+           `(mset! ,vec ,(if (integer? i) (eval off) off) ,val)))
+        ((vector-length ,[vec]) `(mref ,vec ,vec-offset))
+        ;; Relop and Predicate handlers
+        ((,relop ,[x] ,[y]) (guard (relop? relop)) `(,relop ,x ,y))
+        ((null? ,[x]) `(= ,x ,$nil))
+        ((eq? ,[x] ,[y]) `(= ,x ,y))
+        ((boolean? ,[x]) `(= (logand ,x ,mask-boolean) ,tag-boolean))
+        ((fixnum? ,[x]) `(= (logand ,x ,mask-fixnum) ,tag-fixnum))
+        ((pair? ,[x]) `(= (logand ,x ,mask-pair) ,tag-pair))
+        ((vector? ,[x]) `(= (logand ,x ,mask-vector) ,tag-vector))
+        ((procedure? ,[x]) `(= (logand ,x ,mask-procedure) ,tag-procedure))
+        ;; Binop handlers
+        ((* (quote ,x) ,[y]) `(* ,y ,x))
+        ((* ,[x] (quote ,y)) `(* ,x ,y))
+        ((* ,[x] ,[y]) `(* ,x (sra ,y 3)))
+        ((,binop ,[x] ,[y]) (guard (binop? binop)) `(,binop ,x ,y))
+        ;; atoms
+        (,[shift-arg -> var] var)))
+    (define (shift-arg x)
+      (match x
+        ((quote ,num) (guard (number? num)) (ash num shift-fixnum))
+        ((quote ,boo) (guard (boolean? boo)) (if boo $true $false))
+        ((quote ,nil) (guard (null? nil)) $nil)
+        ((,bool) (guard (bool? bool)) `(,bool))
+        ((void) $void)
+        (,val val)))
+    (match x
+      ((letrec ([,label* (lambda ,fml ,[specify -> body*])] ...) ,[specify -> body])
+       `(letrec ([,label* (lambda ,fml ,body*)] ...) ,body)))))

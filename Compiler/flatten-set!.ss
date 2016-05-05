@@ -1,0 +1,38 @@
+(library (Compiler flatten-set!)
+  (export flatten-set!)
+  (import (chezscheme) (Framework match) (Framework helpers))
+  (define-who (flatten-set! x)
+    (define (flatten uvar)
+      (lambda (x)
+        (match x
+          ((if ,[Pred -> p] ,[(flatten uvar) -> c] ,[(flatten uvar) -> a]) `(if ,p ,c ,a))
+          ((begin ,[Effect -> eff*] ... ,[(flatten uvar) -> tail]) (make-begin `(,@eff* ,tail)))
+          (,x `(set! ,uvar ,x)))))
+    (define (Body b)
+      (match b
+        ((locals (,uvar* ...) ,[Tail -> tail]) `(locals (,@uvar*) ,tail))))
+    (define (Tail t)
+      (match t
+        ((if ,[Pred -> pred] ,[ta1] ,[ta2]) `(if ,pred ,ta1 ,ta2))
+        ((begin ,[Effect -> eff*] ... ,[tail]) (make-begin `(,@eff* ,tail)))
+        ((,b ,[tr1] ,[tr2]) `(,b ,tr1 ,tr2))
+        ((,[triv] ,[triv*] ...) `(,triv ,@triv*))
+        (,x x)))
+    (define (Pred p)
+      (match p
+        ((if ,[p1] ,[p2] ,[p3]) `(if ,p1 ,p2 ,p3))
+        ((begin ,[Effect -> eff*] ... ,[pred]) (make-begin `(,@eff* ,pred)))
+        ((,r ,[tr1] ,[tr2]) `(,r ,tr1 ,tr2))
+        ((,bool) `(,bool))
+        (,x x)))
+    (define (Effect e)
+      (match e
+        ((if ,[Pred -> pred] ,[eff1] ,[eff2]) `(if ,pred ,eff1 ,eff2))
+	((begin ,[eff*] ... ,[eff]) (make-begin `(,@eff* ,eff)))
+	((set! ,uvar ,val) ((flatten uvar) val))
+	((nop) '(nop))
+	((,[triv] ,[triv*] ...) `(,triv ,@triv*))
+	(,x x)))
+    (match x
+        ((letrec ((,label* (lambda (,uvar* ...) ,[Body -> body*])) ...) ,[Body -> body])
+         `(letrec ((,label* (lambda (,@uvar*) ,body*)) ...) ,body)))))

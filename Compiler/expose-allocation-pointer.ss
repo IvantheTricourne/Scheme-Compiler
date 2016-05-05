@@ -1,0 +1,13 @@
+(library (Compiler expose-allocation-pointer)
+  (export expose-allocation-pointer)
+  (import (chezscheme) (Framework match) (Framework helpers))
+  (define-who (expose-allocation-pointer x)
+    (define (expose-allocs exp)
+      (match exp
+        ((begin ,eff* ... ,end) (make-begin `(,(map expose-allocs eff*) ... ,(expose-allocs end))))
+        ((set! ,uvar (alloc ,int))
+         (make-begin `((set! ,uvar ,allocation-pointer-register)
+                       (set! ,allocation-pointer-register (+ ,allocation-pointer-register ,int)))))
+        (,x (guard (list? x)) (map expose-allocs x))
+        (,x x)))
+    (map expose-allocs x)))

@@ -1,0 +1,18 @@
+(library (Compiler lift-letrec)
+  (export lift-letrec)
+  (import (chezscheme) (Framework match) (Framework helpers) (Compiler helpers))
+  (define-who (lift-letrec x)
+    (define prog-list '())
+    (define (lift! x)
+      (match x
+        ((letrec ,[progs] ,[exp]) exp)
+        ((,label (lambda ,uvar* ,[exp]))
+         (set! prog-list (cons `(,label (lambda ,uvar* ,exp)) prog-list))
+         `(,label (lambda ,uvar* ,exp)))
+        ((let ([,var* ,[exp*]] ...) ,[exp]) `(let ([,var* ,exp*] ...) ,exp))
+        ((,prim ,[arg*] ... ,[arg]) (guard (prim? prim)) `(,prim ,@arg* ,arg))
+        ((void) `(void)) (,x (guard (atom? x)) x) ((quote ,x) `(quote ,x))
+        ((,[exp] ,[exp*] ...) `(,exp ,@exp*))))
+    (match x
+      ((letrec ,[lift! -> progs] ,[lift! -> exp]) `(letrec ,prog-list ,exp))
+      (,[lift! -> exp] `(letrec ,prog-list ,exp)))))

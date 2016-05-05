@@ -1,0 +1,43 @@
+Test #299:
+Error in wrapper assign-new-frame/wrapper:
+Exception in fx+: #<procedure> is not a fixnum
+(letrec ([num-list?.0 (lambda (ls.1)
+                        (if (null? ls.1)
+                            '#t
+                            (if (fixnum? (car ls.1))
+                                (num-list?.0 (cdr ls.1))
+                                '#f)))]
+         [length.100 (lambda (ls.4)
+                       (if (null? ls.4)
+                           '0
+                           (+ (length.100 (cdr ls.4)) '1)))]
+         [dot-prod.200 (lambda (ls1.5 ls2.6)
+                         (if (if (null? ls1.5) (null? ls2.6) '#f)
+                             '0
+                             (+ (* (car ls1.5) (car ls2.6))
+                                (dot-prod.200 (cdr ls1.5) (cdr ls2.6)))))])
+  (let ([ls1.2 (cons
+                 '1
+                 (cons '2 (cons '3 (cons '4 (cons '5 '())))))]
+        [ls2.3 (cons
+                 '5
+                 (cons '4 (cons '3 (cons '2 (cons '1 '())))))])
+    (if (if (if (eq? (num-list?.0 ls1.2) '#f) '#f '#t)
+            (if (if (eq? (num-list?.0 ls2.3) '#f) '#f '#t)
+                (= (length.100 ls1.2) (length.100 ls2.3))
+                '#f)
+            '#f)
+        (dot-prod.200 ls1.2 ls2.3)
+        '#f)))
+
+Test #323:
+Error in wrapper assign-new-frame/wrapper:
+Exception in fx+: #<procedure> is not a fixnum
+(let ([a.9 '1])
+  (letrec ([f.1 (lambda (x.3)
+                  (letrec ([f.2 (lambda (y.4) (cons x.3 y.4))]) f.2))])
+    (letrec ([f.5 (lambda () (if (f.6) (f.7) (f.8)))]
+             [f.6 (lambda () (if (f.7) (f.8) '#f))]
+             [f.7 (lambda () (if (f.8) '2 '#f))]
+             [f.8 (lambda () (if a.9 '3 '#f))])
+      ((f.1 (f.5)) (f.6)))))
